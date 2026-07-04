@@ -15,7 +15,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
 
-from tools.flights import get_airport_code, search_flights
+from tools.flights import get_airport_code
+from tools.flights_fast import search_flights_fast
 from tools.hotels import search_hotels
 from tools.weather import get_weather_forecast
 
@@ -60,16 +61,16 @@ planning_subagent = {
 flight_subagent = {
     "name": "flight-agent",
     "description": (
-        "Searches for real flights using Google Flights data (SerpAPI). "
-        "Call once per leg — outbound and return are separate calls to search_flights. "
-        "Provide origin city, destination city, date, and number of travelers. "
-        "For cities with multiple airports, searches all of them and returns the best options."
+        "Searches for real flights using Google Flights (fli scraper — no API key needed). "
+        "Call once per leg — outbound and return are separate calls to search_flights_fast. "
+        "Provide origin_iata, dest_iata, date, and travelers. "
+        "For cities with multiple airports (e.g. Goa has GOI and GOX), call both and return all results."
     ),
     "system_prompt": (
         "You are the Flight Search Agent for TripMind.\n\n"
         "Step 1: call get_airport_code for origin and destination.\n"
         "Step 2: pick all IATA code(s) for each city from the results.\n"
-        "Step 3: call search_flights with those codes.\n\n"
+        "Step 3: call search_flights_fast with those codes.\n\n"
         "If a city has more than 1 airport, check all of them and return all results.\n"
         "If no flights found, check for an alternate nearby airport in the results and retry.\n\n"
         "Multi-city trips: the supervisor will tell you destination=first_city and return_origin=last_city_with_airport. "
@@ -77,9 +78,9 @@ flight_subagent = {
         "Nonstop flights are preferred. If only connecting flights are available (stops > 0), flag this clearly in your response "
         "so the supervisor can inform the user to verify on Google Flights or MakeMyTrip.\n\n"
         "The arrival_time in results is the FINAL destination arrival — not a layover time. Include layover details when present.\n\n"
-        "Return the full dict from search_flights without summarising or omitting any data."
+        "Return the full dict from search_flights_fast without summarising or omitting any data."
     ),
-    "tools": [get_airport_code, search_flights],
+    "tools": [get_airport_code, search_flights_fast],
 }
 
 hotel_subagent = {
