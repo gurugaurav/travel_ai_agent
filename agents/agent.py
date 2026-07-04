@@ -255,89 +255,18 @@ agent = create_deep_agent(
 )
 
 
-# ── UI helpers ─────────────────────────────────────────────────────────────────
-
-def _extract_trip_data(messages: list) -> dict | None:
-    """Scan tool messages from the current turn to extract trip data for the UI card."""
-    import json as _json
-
-    last_human_idx = -1
-    for i, msg in enumerate(messages):
-        role = getattr(msg, "type", "") or getattr(msg, "role", "")
-        if role in ("human", "user"):
-            last_human_idx = i
-
-    current_turn = messages[last_human_idx + 1:] if last_human_idx >= 0 else messages
-
-    hotel_data: dict = {}
-    flight_data: dict = {}
-    plan_data: dict = {}
-
-    for msg in current_turn:
-        if getattr(msg, "type", "") != "tool":
-            continue
-        tool_name = getattr(msg, "name", "")
-        raw = msg.content
-        try:
-            content = _json.loads(raw) if isinstance(raw, str) else raw
-        except Exception:
-            continue
-
-        if tool_name == "plan_trip" and isinstance(content, dict):
-            plan_data = content
-
-        elif tool_name == "search_hotels" and isinstance(content, dict):
-            city = content.get("city", "unknown")
-            hotel_data[city.lower()] = content
-
-        elif tool_name == "search_flights" and isinstance(content, dict):
-            route = content.get("route", "")
-            for sep in ["→", "->"]:
-                if sep in route:
-                    dest = route.split(sep, 1)[1].strip().lower()
-                    flight_data[dest] = content
-                    break
-
-    if not hotel_data and not flight_data:
-        return None
-
-    if flight_data:
-        dest_key = next(iter(flight_data))
-        fd = flight_data[dest_key]
-        hd = hotel_data.get(dest_key) or (next(iter(hotel_data.values())) if hotel_data else {})
-
-        ob = (fd.get("outbound") or [{}])[0]
-        rb = (fd.get("return") or [{}])[0]
-        top_hotel = (hd.get("options") or [{}])[0]
-        budget_info = plan_data.get("budget", {})
-
-        return {
-            "destination": fd.get("route", dest_key).split("→")[-1].strip() if "→" in fd.get("route", "") else dest_key.title(),
-            "outbound": ob,
-            "returns": rb,
-            "hotel": top_hotel,
-            "budget": budget_info,
-            "plan": plan_data,
-        }
-
-    return None
-
-
-def chat_invoke(message: str, thread_id: str) -> tuple[str, dict | None]:
-    """Send one user message and return (reply_text, trip_data)."""
+def chat_invoke(message: str, thread_id: str) -> str:
+    """Send one user message and return the agent's reply."""
     result = agent.invoke(
         {"messages": [{"role": "user", "content": message}]},
         config={"configurable": {"thread_id": thread_id}},
     )
     messages = result.get("messages", [])
 
-    reply = "Sorry, I couldn't generate a response."
     for msg in reversed(messages):
         content = getattr(msg, "content", "")
         role = getattr(msg, "type", "") or getattr(msg, "role", "")
         if isinstance(content, str) and content.strip() and role in ("ai", "assistant"):
-            reply = content.strip()
-            break
+            return content.strip()
 
-    trip_data = _extract_trip_data(messages)
-    return reply, trip_data
+    return "Sorry, I couldn't generate a response."
