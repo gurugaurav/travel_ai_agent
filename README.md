@@ -6,6 +6,21 @@
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><b>Chat + full trip plan</b></td>
+    <td align="center"><b>Flight, hotel & weather cards</b></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshot-chat.png" alt="TripMind chat interface showing a Mumbai to Kerala trip plan" width="420"/></td>
+    <td><img src="assets/screenshot-cards.png" alt="TripMind result cards — flights, hotel, weather" width="420"/></td>
+  </tr>
+</table>
+
+---
+
 ## What it does
 
 TripMind takes a single natural-language travel request and coordinates a supervisor + 5 subagents to return a fully structured trip plan:
