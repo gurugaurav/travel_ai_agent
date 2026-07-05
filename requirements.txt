@@ -1,0 +1,28 @@
+# TripMind — Multi-Agent Travel Planning Assistant
+# Install: pip install -r requirements.txt
+
+# ── Core framework ────────────────────────────────────────────────
+streamlit==1.58.0
+deepagents==0.6.12
+langchain==1.3.11
+langchain-core==1.4.8
+langchain-openai==1.3.3
+langgraph==1.2.6
+langgraph-checkpoint==4.1.1
+langgraph-prebuilt==1.1.0
+openai==2.44.0
+
+# ── Search & data tools ───────────────────────────────────────────
+tavily-python==0.7.26          # airport code lookup
+#serpapi==1.0.2                 # Google Flights search
+fli     
+fast-hotel                       # free Google Flights scraper (no API key)
+
+# ── UI & formatting ───────────────────────────────────────────────
+Markdown==3.10.2               # markdown → HTML for card rendering
+python-dateutil==2.9.0.post0   # date parsing in flight tools
+
+
+# ── Utilities ─────────────────────────────────────────────────────
+python-dotenv==1.2.2           # .env loading
+requests==2.34.2
