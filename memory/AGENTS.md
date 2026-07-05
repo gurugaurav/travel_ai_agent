@@ -5,8 +5,8 @@ This file stores persistent user preferences across sessions. The Supervisor loa
 ---
 
 ## 1. User Profile
-- home_airport: Pune (PNQ)
-- home_city: Pune
+- home_airport: Mumbai (BOM)
+- home_city: Mumbai
 - country: India
 - preferred_currency: INR
 - default_travelers: 2

@@ -1,7 +1,8 @@
-"""Flight tools — two-step: airport code lookup + flight search, both via SerpAPI.
+"""Flight tools — two-step: airport code lookup (Tavily) + flight search (fli / SerpAPI).
 
-Requires env var:
-  SERPER_API_KEY  — serpapi.com API key (used for both Google Search and Google Flights)
+Requires env vars:
+  TAVILY_API_KEY   — tavily.com key (used for airport code lookup)
+  SERPAPI_API_KEY  — serpapi.com key (used for Google Flights search, if search_flights is called)
 """
 
 import os
@@ -9,48 +10,54 @@ import re
 from datetime import datetime
 
 from dateutil import parser as dateparser
+from tavily import TavilyClient
 import serpapi
 
 
-# ── Tool 1: Airport code lookup ───────────────────────────────────────────────
+# ── Tool 1: Airport code lookup (Tavily) ──────────────────────────────────────
 
 def get_airport_code(city: str) -> dict:
-    """Flight Agent — Step 1: Look up the IATA airport code for a city via SerpAPI Google Search.
+    """Flight Agent — Step 1: Look up the IATA airport code(s) for a city via Tavily search.
 
-    Searches Google for the city's primary commercial airport IATA code.
-    Call this for every origin and destination before calling search_flights.
+    Searches the web for the city's commercial airport(s) and their IATA codes.
+    Call this for every origin and destination before calling search_flights_fast.
 
     Args:
         city: City or region name, e.g. "Pune", "Goa", "Kochi", "Bali".
 
     Returns:
-        Dict with keys: city, iata_code, airport_name.
+        Dict with:
+          city (str), search_results (list of {title, content, url})
         On failure: {"city": city, "error": "..."}.
     """
-    print(f"\n🔍  get_airport_code | {city}")
+    print(f"\n🔍  get_airport_code [Tavily] | {city}")
 
     try:
-        client = serpapi.Client(api_key=os.environ["SERPER_API_KEY"])
-        raw = client.search({
-            "engine": "google",
-            "q": f"IATA airport code {city}",
-            "num": 5,
-        })
+        client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+        response = client.search(
+            query=f"all IATA airport codes for {city}, India commercial airport",
+            max_results=5,
+            search_depth="basic",
+            include_answer=True,
+        )
     except Exception as e:
-        return {"city": city, "error": f"SerpAPI search failed: {e}"}
+        return {"city": city, "error": f"Tavily search failed: {e}"}
 
-    # Return only the text-relevant parts so the agent can decide the correct airport code
     results = []
-    for item in raw.get("organic_results", [])[:5]:
-        about = item.get("about_this_result", {}).get("source", {}).get("description", "")
+    for r in response.get("results", [])[:5]:
         results.append({
-            "title": item.get("title", ""),
-            "snippet": item.get("snippet", ""),
-            "about": about,
+            "title":   r.get("title", ""),
+            "content": r.get("content", "")[:400],
+            "url":     r.get("url", ""),
         })
 
-    print(f"   → returning {len(results)} search results for agent to interpret")
-    return {"city": city, "search_results": results}
+    # Include the quick answer if Tavily provides one
+    answer = response.get("answer", "")
+    if answer:
+        print(f"   → Tavily answer: {answer[:120]}")
+
+    print(f"   → {len(results)} result(s) returned")
+    return {"city": city, "answer": answer, "search_results": results}
 
 
 # ── Tool 2: Flight search ──────────────────────────────────────────────────────
@@ -159,7 +166,7 @@ def search_flights(
             "type": "2",
         })
     except Exception as e:
-        print(f"   ⚠️  SerpAPI error: {e}")
+        print(f"[warning] SerpAPI error: {e}")
         return {"route": f"{origin_iata} → {dest_iata}", "flights": []}
 
     all_items = list(raw.get("best_flights", [])) + list(raw.get("other_flights", []))
@@ -167,13 +174,13 @@ def search_flights(
 
     nonstop = [f for f in parsed if f["direct"]]
     if nonstop:
-        print(f"   ✅ {len(nonstop)} nonstop flight(s) found")
+        print(f"{len(nonstop)} nonstop flight(s) found")
         flights = nonstop[:3]
     elif direct_only:
-        print("   ⚠️  No nonstop flights found")
+        print("No nonstop flights found")
         flights = []
     else:
-        print("   ℹ️  No nonstop — returning best connecting options")
+        print("No nonstop — returning best connecting options")
         flights = parsed[:3]
 
     if flights:

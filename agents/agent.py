@@ -155,6 +155,20 @@ itinerary_subagent = {
 SYSTEM_PROMPT = """You are TripMind, an intelligent multi-agent travel planning assistant.
 You are the Supervisor — the ONLY agent that talks directly to the user.
 
+╔══════════════════════════════════════════════════════════════════╗
+║  RESPONSE FORMAT — NON-NEGOTIABLE                               ║
+║  Every single response you send to the user MUST be a valid     ║
+║  JSON object. No text before or after. No markdown fences.      ║
+║  Just the raw JSON object. The UI parses your response as JSON. ║
+║                                                                  ║
+║  Three allowed types:                                            ║
+║  • "trip_plan"  — after a full search completes                 ║
+║  • "comparison" — when comparing 2–3 destinations               ║
+║  • "text"       — everything else (questions, clarifications)   ║
+║                                                                  ║
+║  {"type":"text","content":"your **markdown** here"}             ║
+╚══════════════════════════════════════════════════════════════════╝
+
 ## Your Architecture
 You coordinate 5 specialized subagents:
 - **planning-agent**  → pure reasoning, allocates budget, determines hotel tier, returns Trip Context
@@ -216,17 +230,6 @@ If flights or hotels exceed budget or return no results:
 - Suggest trade-offs: "I can find flights for ₹X if you fly Thursday instead — want me to check?"
 - Rerun the relevant subagent with adjusted parameters.
 
-## Presenting Results
-Format as clean markdown. Show:
-1. **Trip Overview** — destination, dates, duration, travelers
-2. **Best Flight Option** — airline, times, price per person + total
-3. **Best Hotel** — name, rating, price/night, total cost
-4. **Budget Breakdown** — table with all categories
-5. **Weather Summary** — key conditions, clothing tip
-6. **Day-by-Day Itinerary** — from itinerary-agent output
-7. **Packing List** — from itinerary-agent output
-8. **Final Recommendation** — "✈️ My recommendation: [destination] — [2-line reason]"
-
 ## Follow-ups
 After presenting results, invite questions:
 - Budget changes, date changes, destination swaps
@@ -237,6 +240,59 @@ After presenting results, invite questions:
 After completing a trip plan, update memory/AGENTS.md with:
 - Any new permanent preferences revealed during the conversation
 - Add trip to Previous Trips section if user confirmed/booked it
+
+## Output Format — CRITICAL
+REMINDER: Output ONLY raw JSON — no text before or after, no markdown fences.
+
+─── SCHEMA: trip_plan ───────────────────────────────────────────────
+{
+  "type": "trip_plan",
+  "title": "Pune to Goa Monsoon Getaway — August 2026",
+  "overview": {"origin":"Pune","destination":"Goa","dates":"Aug 1–8, 2026","duration_days":8,"travelers":2,"budget_total":"₹60,000"},
+  "flight": {
+    "airline": "IndiGo", "flight_number": "6E 336",
+    "outbound": {"origin_iata":"PNQ","dest_iata":"GOX","dep":"07:20","arr":"08:35","duration":"1h 15m","stops":0,"price_inr":12444},
+    "return":   {"origin_iata":"GOX","dest_iata":"PNQ","dep":"23:20","arr":"00:20","duration":"1h 00m","stops":0,"price_inr":9170},
+    "total_inr": 21614
+  },
+  "hotel": {"name":"Larios Beach Holidays Resort","area":"Calangute, North Goa","rating":4.1,"price_per_night_inr":2199,"nights":7,"total_inr":15393},
+  "weather": {"temp":"28–32°C","humidity":"88%","condition":"Heavy monsoon rainfall","warning":"Heavy Rain Warning"},
+  "budget_breakdown": [
+    {"category":"Flights","amount_inr":21614},
+    {"category":"Hotel","amount_inr":15393},
+    {"category":"Food & Drinks (Est.)","amount_inr":12000},
+    {"category":"Local Transport","amount_inr":7700},
+    {"category":"Activities","amount_inr":2830}
+  ],
+  "itinerary": [
+    {"day":1,"date":"Aug 1","theme":"Arrival & Beach Mist","summary":"Check-in at Larios. Sunset walk at Calangute with rain gear."},
+    {"day":2,"date":"Aug 2","theme":"Dudhsagar Falls","summary":"Day trip to the falls — monsoon makes it spectacular."}
+  ],
+  "packing": [
+    {"category":"Rain Gear","items":["Heavy umbrella","Waterproof phone pouch","Quick-dry poncho"]},
+    {"category":"Clothing","items":["Breathable cotton","Flip-flops","Extra swimwear"]}
+  ],
+  "recommendation": "Goa in August is poetic — neon greens, thin crowds. This plan leaves ₹463 for a final shack drink. Ready to book?"
+}
+
+─── SCHEMA: comparison ──────────────────────────────────────────────
+{
+  "type": "comparison",
+  "title": "Manali vs Ladakh — September 2026",
+  "options": [
+    {"name":"Manali","tagline":"Lush valleys & cafes","flight":"PNQ→KUU | 2h 30m | ₹14,000","hotel":"The Himalayan (~₹3,500/night)","weather":"15–25°C, clear","highlights":["Rohtang Pass","Solang Valley","Old Manali cafes"],"budget_estimate":"₹55,000 for 2","best_for":"Couples, first-timers","verdict":"Best value, easier access"},
+    {"name":"Ladakh","tagline":"Raw Himalayan desert","flight":"PNQ→IXL | 2h | ₹22,000","hotel":"The Grand Dragon (~₹5,000/night)","weather":"10–20°C, sunny","highlights":["Pangong Lake","Nubra Valley","Khardung La"],"budget_estimate":"₹75,000 for 2","best_for":"Adventure seekers","verdict":"Bucket-list, higher cost"}
+  ],
+  "recommendation": "Manali for budget and comfort; Ladakh if you want a once-in-a-lifetime landscape."
+}
+
+─── SCHEMA: text (ALL other responses) ──────────────────────────────
+{"type":"text","content":"Your **markdown** response here."}
+
+Rules:
+- amount_inr fields must be integers, not strings.
+- Omit fields you don't have data for — never use null.
+- itinerary summary = one sentence preview of the day.
 """
 
 
@@ -256,8 +312,39 @@ agent = create_deep_agent(
 )
 
 
+def _ensure_json(text: str) -> str:
+    """If the agent didn't return JSON, wrap it so the UI can render it."""
+    import json, re
+    text = text.strip()
+    # Already valid JSON?
+    try:
+        json.loads(text)
+        return text
+    except Exception:
+        pass
+    # JSON inside a code fence?
+    m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    if m:
+        try:
+            json.loads(m.group(1))
+            return m.group(1)
+        except Exception:
+            pass
+    # Bare JSON block anywhere?
+    m = re.search(r'(\{.*\})', text, re.DOTALL)
+    if m:
+        try:
+            json.loads(m.group(1))
+            return m.group(1)
+        except Exception:
+            pass
+    # Fallback: wrap as text type so UI renders markdown
+    import json as _json
+    return _json.dumps({"type": "text", "content": text})
+
+
 def chat_invoke(message: str, thread_id: str) -> str:
-    """Send one user message and return the agent's reply."""
+    """Send one user message and return the agent's reply (always JSON)."""
     result = agent.invoke(
         {"messages": [{"role": "user", "content": message}]},
         config={"configurable": {"thread_id": thread_id}},
@@ -268,6 +355,7 @@ def chat_invoke(message: str, thread_id: str) -> str:
         content = getattr(msg, "content", "")
         role = getattr(msg, "type", "") or getattr(msg, "role", "")
         if isinstance(content, str) and content.strip() and role in ("ai", "assistant"):
-            return content.strip()
+            return _ensure_json(content.strip())
 
-    return "Sorry, I couldn't generate a response."
+    import json
+    return json.dumps({"type": "text", "content": "Sorry, I couldn't generate a response."})

@@ -26,7 +26,7 @@ def _parse_date(date_str: str) -> str:
     today = datetime.today()
     while dt.date() < today.date():
         dt = dt.replace(year=dt.year + 1)
-        print(f"   ℹ️  Date was in the past — advanced to {dt.strftime('%Y-%m-%d')}")
+        print(f"Date was in the past — advanced to {dt.strftime('%Y-%m-%d')}")
 
     return dt.strftime("%Y-%m-%d")
 
@@ -117,11 +117,11 @@ def search_flights_fast(
         client = SearchFlights()
         raw_results = client.search(filters, currency="INR")
     except Exception as e:
-        print(f"   ⚠️  fli error: {e}")
+        print(f"[error] fli error: {e}")
         return {"route": f"{origin_iata} → {dest_iata}", "flights": [], "error": str(e)}
 
     if not raw_results:
-        print("   → no results")
+        print("no results")
         return {"route": f"{origin_iata} → {dest_iata}", "flights": []}
 
     flights = []
@@ -150,10 +150,10 @@ def search_flights_fast(
     flights.sort(key=lambda f: (not f["direct"], f["price_inr"]))
 
     nonstop_count = sum(1 for f in flights if f["direct"])
-    print(f"   → {len(flights)} result(s) with price, {nonstop_count} nonstop")
+    print(f"{len(flights)} result(s) with price, {nonstop_count} nonstop")
     if flights:
         best = flights[0]
         tag = "direct" if best["direct"] else f"{best['stops']}-stop"
-        print(f"   → best: {best['airline']} {best['departure_time']}→{best['arrival_time']} ₹{best['price_inr']:,} [{tag}]")
+        print(f"best: {best['airline']} {best['departure_time']}→{best['arrival_time']} ₹{best['price_inr']:,} [{tag}]")
 
     return {"route": f"{origin_iata} → {dest_iata}", "flights": flights}
